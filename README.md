@@ -12,8 +12,8 @@
 ### Clone the repository
 
 ```
-git clone https://github.com/0102dream/YOLOV5-Autonomous.git
-cd YOLOV5-Autonomous
+git clone https://github.com/amblade/helpdriving.git
+cd helpdriving
 mkdir test
 mkdir outputs
 ```
