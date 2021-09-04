@@ -18,6 +18,20 @@ def detect(source, weights):
     cycle = [1, 3]
     traffic_light = [9]
     stop_sign = [11]
+    
+    device = select_device('')
+    half = device.type != 'cpu'  # half precision only supported on CUDA
+
+    # Load model
+    model = attempt_load(weights, map_location=device)  # load FP32 model
+    stride = int(model.stride.max())  # model stride
+    imgsz = check_img_size(960, s=stride)  # check img_size
+    names = model.module.names if hasattr(model, 'module') else model.names  # get class names
+    if half:
+        model.half()  # to FP16
+    # Run inference4
+    if device.type != 'cpu':
+        model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
 
     cap = cv2.VideoCapture(source)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -28,16 +42,7 @@ def detect(source, weights):
           break
 
         im0s = cv2.resize(im0s, (960, 540))
-        device = select_device('')
-        half = device.type != 'cpu'  # half precision only supported on CUDA
-
-        # Load model
-        model = attempt_load(weights, map_location=device)  # load FP32 model
-        stride = int(model.stride.max())  # model stride
-        imgsz = check_img_size(960, s=stride)  # check img_size
-        names = model.module.names if hasattr(model, 'module') else model.names  # get class names
-        if half:
-            model.half()  # to FP16
+        
 
         img = letterbox(im0s, 960, stride=stride)[0]
 
@@ -45,9 +50,7 @@ def detect(source, weights):
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        # Run inference4
-        if device.type != 'cpu':
-            model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
+        
         # t0 = time.time()
         
         img = torch.from_numpy(img).to(device)
@@ -78,30 +81,39 @@ def detect(source, weights):
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     c = int(cls)  # integer class
-                    if c in vehicles and conf > 0.5:
+                    xmin = int(xyxy[0])
+                    ymin = int(xyxy[1])
+                    xmax = int(xyxy[2])
+                    ymax = int(xyxy[3])
+                    if c in vehicles and conf > 0.4:
                         c = 2
                         label = f'vehicle'
+                        if 480 > xmin and 480 < xmax and 270 > ymin and 270 < ymax:
+                            plot_one_box(xyxy, im0, label=label, color=(0, 0, 255), line_thickness=1)
                     elif c in animals:
                         c = 14
                         label = f'animal'
-                    elif c in cycle  and conf > 0.5:
+                        plot_one_box(xyxy, im0, label=label, color=(0, 0, 255), line_thickness=1)
+                    elif c in cycle  and conf > 0.4:
                         c = 1
                         label = 'cycle'
-                    elif c == 0  and conf > 0.5:
+                    elif c == 0  and conf > 0.4:
                         label = 'person'
-                    elif c in traffic_light and conf > 0.5:
-                        light = im0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+                    elif c in traffic_light and conf > 0.4:
+                        light = im0[ymin:ymax, xmin:xmax]
+                        print(im0.shape)
                         light = cv2.cvtColor(light, cv2.COLOR_BGR2RGB)
                         light = red_green_yellow(light)
-                        if light != "":
-                          label = f'light-{light}'
+                        if light == "STOP":
+                          label = f'{light}'
+                          plot_one_box(xyxy, im0, label=label, color=(0, 0, 255), line_thickness=1)
                         else:
                           continue
                     else:
                       continue
                     
 
-                    plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=1)
+#                     plot_one_box(xyxy, im0, label=label, color=colors(c, True), line_thickness=1)
 
         # Stream results
         out.write(im0)
